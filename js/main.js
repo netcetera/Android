@@ -1,59 +1,76 @@
-// When the DOM is ready we need to set up our various click events.
-document.addEventListener("DOMContentLoaded", function() {
-  var main_division   = document.getElementById('main'),
-      back_button = document.getElementById('back_button');
-      
-  // Prevent webkit from allowing the user to scroll the page using a move gesture.
-  // Added to prevent the user from scrolling past the end of the home page.
-  main_division.addEventListener('touchmove', function(event) { event.preventDefault(); }, false );
-  
-  // Set the switch_screen callback for the toolbar back button.
-  set_click(back_button, function(e) { switch_screen(e.getAttribute('href')); });
-  
-  // Bind each of the buttons on the home screen to a switch_screen callback.
-  [].forEach.call(document.querySelectorAll("ul.buttons a.switch_screen"), function(el) {
-    set_click(el, function(e) { switch_screen(e.getAttribute('href')); });
-  });
-  
+
+
+//EDIT THESE LINES
+//Title of the blog
+var TITLE = "Netcetera News";
+//RSS url
+var RSS = "http://www.netcetera.co.uk/blog/index.php?feed=rss2";
+//Stores entries
+var entries = [];
+var selectedEntry = "";
+
+//listen for detail links
+$(".contentLink").live("click", function() {
+	selectedEntry = $(this).data("entryid");
 });
 
-// This callback function is called by the JSONP response of the Tumblr API
-// request made in the script element below this one.
-function load_images(json) {
-  
-  var i,
-      photos,
-      photo_big,
-      caption_text,
-      options,
-      instance,
-      images = [],
-      posts = json['response']['posts'],
-      launch_link = document.getElementById('launch_link');
-
-  // Gather all 20 images returned from the Tumblr API call into an array of hashes.
-  for (i = 0; i < posts.length; i++) {
-    photos         = posts[i]['photos'][0]['alt_sizes'];
-    photo_big      = photos[0]['url'];
-    caption_text   = strip(posts[i]['caption']);
-    
-    images.push({ url: photo_big, caption: caption_text });
-  }
-  
-  // Configure Photoswipe to load images from the array of hashes created above.
-  options = {
-    captionAndToolbarAutoHideDelay: 0,
-    getImageSource: function(obj){
-      return obj.url;
-    },
-    getImageCaption: function(obj){
-      return obj.caption;
-    }
-  };
-  
-  instance = Code.PhotoSwipe.attach(images, options);
-  
-  // Launch the slideshow when the user clicks on the launch link on the home screen.
-  set_click(launch_link, function(event) { instance.show(0); });
-  
+function renderEntries(entries) {
+    var s = '';
+    $.each(entries, function(i, v) {
+        s += '<li><a href="#contentPage" class="contentLink" data-entryid="'+i+'">' + v.title + '</a></li>';
+    });
+    $("#linksList").html(s);
+    $("#linksList").listview("refresh");
 }
+
+//Listen for Google's library to load
+function initialize() {
+	console.log('ready to use google');
+	var feed = new google.feeds.Feed(RSS);
+	feed.setNumEntries(10);
+	$.mobile.showPageLoadingMsg();
+	feed.load(function(result) {
+		$.mobile.hidePageLoadingMsg();
+		console.dir(result);
+		if(!result.error) {
+			entries = result.feed.entries;
+			localStorage["entries"] = JSON.stringify(entries);
+			renderEntries(entries);
+		} else {
+			console.log("Error - "+result.error.message);
+			if(localStorage["entries"]) {
+				$("#status").html("Using cached version...");
+				entries = JSON.parse(localStorage["entries"]);
+				renderEntries(entries);
+			} else {
+				$("#status").html("Sorry, we are unable to get the RSS and there is no cache.");
+			}
+		}
+	});
+}
+
+//Listen for main page
+$("#mainPage").live("pageinit", function() {
+	//Set the title
+	$("h1", this).text(TITLE);
+	
+	google.load("feeds", "1",{callback:initialize});
+});
+
+$("#mainPage").live("pagebeforeshow", function(event,data) {
+	if(data.prevPage.length) {
+		$("h1", data.prevPage).text("");
+		$("#entryText", data.prevPage).html("");
+	};
+});
+
+//Listen for the content page to load
+$("#contentPage").live("pageshow", function(prepage) {
+	//Set the title
+	$("h1", this).text(entries[selectedEntry].title);
+	var contentHTML = "";
+	contentHTML += entries[selectedEntry].content;
+	contentHTML += '<p/><a href="'+entries[selectedEntry].link + '">Read Entry on Site</a>';
+	$("#entryText",this).html(contentHTML);
+});
+	
